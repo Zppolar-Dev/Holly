@@ -11,7 +11,7 @@ const port = process.env.PORT || 3000;
 // Configurações do Discord OAuth2
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI || 'https://dash-holly.com/auth/discord/callback';
+const REDIRECT_URI = process.env.REDIRECT_URI || 'https://holly-j4a7.onrender.com/auth/discord/callback';
 
 
 // Verificação rigorosa das variáveis
