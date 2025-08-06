@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Configurações do OAuth2
     const clientId = '1069819161057968218'; // Substitua pelo seu Client ID
-    const redirectUri = encodeURIComponent('http://localhost:3000/auth/discord/callback'); // Ou seu domínio
+    const redirectUri = encodeURIComponent('https://holly-j4a7.onrender.com/auth/discord/callback'); // Ou seu domínio
     const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=identify%20guilds`;
 
     // Verificar se já está autenticado
