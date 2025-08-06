@@ -8,7 +8,7 @@ const port = process.env.PORT || 3000; // IMPORTANTÃO: Render injeta essa vari�
 
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI || `https://teu-dominio-aqui.com/auth/discord/callback`;
+const REDIRECT_URI = process.env.REDIRECT_URI || 'https://holly-j4a7.onrender.com/auth/discord/callback';
 
 // Verifica se as variáveis tão lá, se não, para o app na hora
 if (!CLIENT_ID || !CLIENT_SECRET) {
