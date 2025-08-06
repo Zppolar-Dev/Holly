@@ -1,0 +1,345 @@
+.dashboard-container {
+    display: flex;
+    min-height: 100vh;
+    padding-top: 70px;
+    background-color: #f9f3ff;
+}
+
+.dashboard-sidebar {
+    width: 280px;
+    background-color: white;
+    padding: 2rem 1.5rem;
+    border-right: 1px solid #f0e6ff;
+    position: fixed;
+    height: 100%;
+    transition: all 0.3s ease;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+}
+
+.user-info {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid #f0e6ff;
+}
+
+.profile-pic {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    margin-bottom: 1rem;
+    border: 3px solid #ff9ff3;
+    object-fit: cover;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 8px rgba(255, 159, 243, 0.2);
+}
+
+.profile-pic:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 12px rgba(255, 159, 243, 0.3);
+}
+
+.user-info h3 {
+    font-size: 1.3rem;
+    margin-bottom: 0.2rem;
+    font-weight: 600;
+    color: #5f27cd;
+}
+
+.user-info p {
+    color: #888;
+    font-size: 0.9rem;
+}
+
+.user-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #ccc;
+}
+
+.status-online {
+    color: #2ecc71;
+}
+
+.status-text {
+    font-size: 0.9rem;
+    color: #888;
+}
+
+.sidebar-menu {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.sidebar-menu li {
+    margin-bottom: 0.5rem;
+}
+
+.sidebar-menu a {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.8rem 1rem;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+    color: #666;
+    text-decoration: none;
+}
+
+.sidebar-menu a:hover {
+    background-color: #f5f0ff;
+    color: #5f27cd;
+    padding-left: 1.5rem;
+}
+
+.sidebar-menu a.active {
+    background-color: #ff9ff3;
+    color: white;
+    box-shadow: 0 4px 8px rgba(255, 159, 243, 0.3);
+}
+
+.sidebar-menu i {
+    width: 24px;
+    text-align: center;
+    font-size: 1.1rem;
+}
+
+.dashboard-content {
+    flex: 1;
+    padding: 2rem;
+    margin-left: 280px;
+    transition: all 0.3s ease;
+}
+
+.dashboard-content h1 {
+    font-size: 2rem;
+    margin-bottom: 2rem;
+    color: #5f27cd;
+    font-family: 'Poppins', sans-serif;
+    position: relative;
+    padding-bottom: 0.5rem;
+}
+
+.dashboard-content h1::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 50px;
+    height: 3px;
+    background: linear-gradient(90deg, #ff9ff3, #5f27cd);
+    border-radius: 3px;
+}
+
+.status-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.dashboard-card {
+    background-color: white;
+    padding: 1.5rem;
+    border-radius: 15px;
+    text-align: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+    border: 1px solid #f0e6ff;
+}
+
+.dashboard-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+}
+
+.dashboard-card i {
+    font-size: 2rem;
+    color: #ff9ff3;
+    margin-bottom: 1rem;
+}
+
+.dashboard-card h3 {
+    margin-bottom: 0.5rem;
+    color: #5f27cd;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #5f27cd;
+    margin: 0.5rem 0;
+}
+
+.dashboard-section {
+    margin-bottom: 3rem;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.section-header h2 {
+    font-size: 1.5rem;
+    color: #5f27cd;
+    margin: 0;
+}
+
+.servers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.server-card {
+    background-color: white;
+    padding: 1.5rem;
+    border-radius: 15px;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+    border: 1px solid #f0e6ff;
+}
+
+.server-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+    background-color: #fcf9ff;
+}
+
+.server-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background-color: #f5f0ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem;
+    font-size: 2rem;
+    color: #ff9ff3;
+    transition: all 0.3s ease;
+}
+
+.server-card:hover .server-icon {
+    transform: scale(1.1);
+    background: linear-gradient(135deg, #ff9ff3, #5f27cd);
+    color: white;
+}
+
+.stats-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+.stat-chart {
+    background-color: white;
+    padding: 1.5rem;
+    border-radius: 15px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+    border: 1px solid #f0e6ff;
+}
+
+.stat-chart h3 {
+    color: #5f27cd;
+    margin-top: 0;
+    margin-bottom: 1rem;
+}
+
+.chart-placeholder {
+    height: 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: #fcf9ff;
+    border-radius: 10px;
+    color: #aaa;
+}
+
+.chart-placeholder i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    color: #f0e6ff;
+}
+
+.sidebar-footer {
+    margin-top: auto;
+    padding-top: 2rem;
+    border-top: 1px solid #f0e6ff;
+    text-align: center;
+    font-size: 0.9rem;
+    color: #888;
+}
+
+@media (max-width: 992px) {
+    .dashboard-sidebar {
+        width: 250px;
+    }
+    
+    .dashboard-content {
+        margin-left: 250px;
+    }
+}
+
+@media (max-width: 768px) {
+    .dashboard-sidebar {
+        transform: translateX(-100%);
+        width: 280px;
+        z-index: 1000;
+    }
+    
+    .dashboard-sidebar.active {
+        transform: translateX(0);
+    }
+    
+    .dashboard-content {
+        margin-left: 0;
+    }
+    
+    .servers-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+    
+    .stats-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Adicione no final do arquivo */
+.server-icon img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+/* Estilo para o loading */
+.loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255,255,255,.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
