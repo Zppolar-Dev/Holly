@@ -6,7 +6,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 // Depois inicialize o app Express
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 // Configurações do Discord OAuth2
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
