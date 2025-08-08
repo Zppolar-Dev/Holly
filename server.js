@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
+const cookieParser = require('cookie-parser');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,12 +15,25 @@ const REDIRECT_URI = `${BASE_URL}/auth/discord/callback`;
 
 // Middlewares
 app.use(express.json());
+app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Verificação das variáveis de ambiente
 if (!CLIENT_ID || !CLIENT_SECRET) {
   console.error('ERRO: DISCORD_CLIENT_ID ou DISCORD_CLIENT_SECRET não definidos');
   process.exit(1);
+}
+
+// Middleware de autenticação
+function authenticateToken(req, res, next) {
+  const token = req.cookies.holly_token || req.query.token;
+  
+  if (!token) {
+    return res.status(401).json({ error: 'Não autorizado' });
+  }
+  
+  req.token = token;
+  next();
 }
 
 // Rota de autenticação
@@ -31,9 +45,7 @@ app.get('/auth/discord', (req, res) => {
     scope: 'identify guilds'
   });
 
-  const discordAuthUrl = `https://discord.com/api/oauth2/authorize?${params.toString()}`;
-  console.log(`Redirecionando para: ${discordAuthUrl}`);
-  res.redirect(discordAuthUrl);
+  res.redirect(`https://discord.com/api/oauth2/authorize?${params.toString()}`);
 });
 
 // Rota de callback
@@ -50,44 +62,84 @@ app.get('/auth/discord/callback', async (req, res) => {
       return res.redirect('/dashboard.html?error=no_code');
     }
 
-    console.log('Code recebido:', code);
-
     // Troca o code por access_token
-    const params = new URLSearchParams();
-    params.append('client_id', CLIENT_ID);
-    params.append('client_secret', CLIENT_SECRET);
-    params.append('grant_type', 'authorization_code');
-    params.append('code', code);
-    params.append('redirect_uri', REDIRECT_URI);
-    params.append('scope', 'identify guilds');
-
-    const response = await axios.post('https://discord.com/api/oauth2/token', params, {
+    const tokenResponse = await axios.post('https://discord.com/api/oauth2/token', new URLSearchParams({
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      grant_type: 'authorization_code',
+      code: code,
+      redirect_uri: REDIRECT_URI,
+      scope: 'identify guilds'
+    }), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       }
     });
 
-    console.log('Resposta do Discord:', {
-      status: response.status,
-      data: { 
-        access_token: response.data.access_token ? '***RECEBIDO***' : null,
-        expires_in: response.data.expires_in
-      }
+    // Configura o cookie seguro
+    res.cookie('holly_token', tokenResponse.data.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: tokenResponse.data.expires_in * 1000
     });
 
-    if (!response.data.access_token) {
-      throw new Error('Access token não recebido');
-    }
-
-    // Redireciona com o token
-    res.redirect(`/dashboard.html?token=${response.data.access_token}`);
+    res.redirect('/dashboard.html');
 
   } catch (error) {
-    console.error('ERRO NO CALLBACK:', {
-      message: error.message,
-      response: error.response?.data
-    });
+    console.error('ERRO NO CALLBACK:', error.response?.data || error.message);
     res.redirect('/dashboard.html?error=auth_failed');
+  }
+});
+
+// Rota para dados do usuário
+app.get('/api/user', authenticateToken, async (req, res) => {
+  try {
+    const userRes = await axios.get('https://discord.com/api/users/@me', {
+      headers: { 'Authorization': `Bearer ${req.token}` }
+    });
+    
+    res.json({
+      ...userRes.data,
+      plan: 'free' // Adicione seus próprios dados do usuário aqui
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar usuário' });
+  }
+});
+
+// Rota para servidores do usuário
+app.get('/api/user/guilds', authenticateToken, async (req, res) => {
+  try {
+    const guildsRes = await axios.get('https://discord.com/api/users/@me/guilds', {
+      headers: { 'Authorization': `Bearer ${req.token}` }
+    });
+    
+    res.json(guildsRes.data);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar servidores' });
+  }
+});
+
+// Rota para estatísticas do bot
+app.get('/api/stats', async (req, res) => {
+  try {
+    // Dados fictícios - substitua por seus dados reais
+    res.json({
+      commands_24h: 1250,
+      unique_users: 842,
+      uptime: 99.8,
+      commands_by_hour: Array(24).fill().map(() => Math.floor(Math.random() * 100)),
+      command_categories: {
+        moderation: 35,
+        fun: 25,
+        utility: 20,
+        music: 15,
+        other: 5
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar estatísticas' });
   }
 });
 
