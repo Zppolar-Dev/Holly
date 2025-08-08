@@ -10,14 +10,15 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Configurações
     const CONFIG = {
         CLIENT_ID: '1069819161057968218',
-        REDIRECT_URI: encodeURIComponent(window.location.origin + '/auth/discord/callback'),
+        REDIRECT_URI: 'https://holly-j4a7.onrender.com/auth/discord/callback',
         API_BASE_URL: 'https://holly-j4a7.onrender.com',
         DEFAULT_AVATAR: 'https://cdn.discordapp.com/embed/avatars/0.png',
         THEME_KEY: 'holly_theme',
-        TOKEN_KEY: 'holly_token'
+        TOKEN_KEY: 'holly_token',
+        TOKEN_EXPIRATION_CHECK: true
     };
 
-    // Elementos UI
+    // Elementos da UI
     const UI = {
         loginBtn: document.getElementById('login-btn'),
         userDropdown: document.getElementById('userDropdown'),
@@ -51,7 +52,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         overlay: document.getElementById('overlay')
     };
 
-    // Estado
+    // Estado da aplicação
     const STATE = {
         user: null,
         guilds: [],
@@ -59,7 +60,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         theme: localStorage.getItem(CONFIG.THEME_KEY) || 'light',
         isSidebarOpen: false,
         isMobileMenuOpen: false,
-        isOverlayVisible: false
+        isOverlayVisible: false,
+        lastScrollPosition: 0
     };
 
     // Inicialização
@@ -99,7 +101,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         UI.dashboardSidebar.classList.toggle('active', STATE.isSidebarOpen);
         UI.dashboardContent.classList.toggle('sidebar-active', STATE.isSidebarOpen);
         
-        // Ajusta margem no desktop para evitar sobreposição
         if (window.innerWidth > 768) {
             UI.dashboardContent.classList.toggle('sidebar-closed', !STATE.isSidebarOpen);
         }
@@ -145,7 +146,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         UI.dashboardSidebar.classList.toggle('active', STATE.isSidebarOpen);
         UI.dashboardContent.classList.toggle('sidebar-active', STATE.isSidebarOpen);
         
-        // Ajusta margem no desktop para evitar sobreposição
         if (window.innerWidth > 768) {
             UI.dashboardContent.classList.toggle('sidebar-closed', !STATE.isSidebarOpen);
         }
@@ -177,7 +177,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // Configurar eventos
+    // Configurar event listeners
     function setupEventListeners() {
         // Autenticação
         if (UI.loginBtn) {
@@ -762,8 +762,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (STATE.user) {
             logout();
         } else {
-            const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CONFIG.CLIENT_ID}&redirect_uri=${CONFIG.REDIRECT_URI}&response_type=code&scope=identify%20guilds`;
-            window.location.href = discordAuthUrl;
+            // Usa a rota do backend para iniciar o fluxo OAuth2
+            window.location.href = `${CONFIG.API_BASE_URL}/auth/discord`;
         }
     }
 
@@ -775,7 +775,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         STATE.stats = null;
         showUnauthenticatedUI();
         showNotification('Você saiu da sua conta', 'info');
-        window.location.href = window.location.pathname; // Recarrega a página sem token
+        window.location.href = window.location.pathname;
     }
 
     // Verificar token na URL
@@ -793,37 +793,33 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Gerenciar servidor
     function manageServer(guildId) {
         showNotification(`Redirecionando para gerenciamento do servidor ${guildId}`, 'info');
-        // Implementação real redirecionaria para a página de gerenciamento
         console.log(`Gerenciando servidor ${guildId}`);
     }
 
     // Visualizar detalhes do servidor
     function viewServerDetails(guildId) {
         console.log(`Visualizando servidor ${guildId}`);
-        // Implementação real mostraria detalhes do servidor
     }
 
     function toggleMobileMenu() {
-    STATE.isMobileMenuOpen = !STATE.isMobileMenuOpen;
-    
-    if (UI.navbarMenu) {
-        UI.navbarMenu.classList.toggle('active');
-    }
-    
-    if (UI.hamburger) {
-        UI.hamburger.classList.toggle('active');
-        UI.hamburger.setAttribute('aria-expanded', STATE.isMobileMenuOpen);
+        STATE.isMobileMenuOpen = !STATE.isMobileMenuOpen;
         
-        // Alternar ícone do hamburger
-        const icon = UI.hamburger.querySelector('i');
-        if (icon) {
-            icon.className = STATE.isMobileMenuOpen ? 'fas fa-times' : 'fas fa-bars';
+        if (UI.navbarMenu) {
+            UI.navbarMenu.classList.toggle('active');
         }
+        
+        if (UI.hamburger) {
+            UI.hamburger.classList.toggle('active');
+            UI.hamburger.setAttribute('aria-expanded', STATE.isMobileMenuOpen);
+            
+            const icon = UI.hamburger.querySelector('i');
+            if (icon) {
+                icon.className = STATE.isMobileMenuOpen ? 'fas fa-times' : 'fas fa-bars';
+            }
+        }
+        
+        document.body.style.overflow = STATE.isMobileMenuOpen ? 'hidden' : '';
     }
-    
-    // Bloquear scroll do body quando o menu estiver aberto
-    document.body.style.overflow = STATE.isMobileMenuOpen ? 'hidden' : '';
-}
 
     // Alternar modal
     function toggleModal(show) {
@@ -856,9 +852,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         showLoading(true);
         
         try {
-            // Simulação de envio para API
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
             toggleModal(false);
             showNotification('Feedback enviado com sucesso! Obrigado.', 'success');
             UI.feedbackForm.reset();
@@ -927,6 +921,24 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         UI.currentTime.textContent = `${dateString} • ${timeString}`;
         UI.currentTime.setAttribute('aria-label', `Data e hora atual: ${dateString} às ${timeString}`);
+    }
+
+    // Alternar tema
+    function toggleTheme() {
+        STATE.theme = STATE.theme === 'light' ? 'dark' : 'light';
+        localStorage.setItem(CONFIG.THEME_KEY, STATE.theme);
+        applyTheme();
+    }
+
+    // Aplicar tema
+    function applyTheme() {
+        document.documentElement.setAttribute('data-theme', STATE.theme);
+        
+        if (UI.themeIcon) {
+            UI.themeIcon.className = STATE.theme === 'light' ? 'fas fa-moon' : 'fas fa-sun';
+        }
+
+        showNotification(`Tema ${STATE.theme === 'light' ? 'claro' : 'escuro'} ativado`);
     }
 
     // Inicializar a aplicação
