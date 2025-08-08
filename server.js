@@ -3,6 +3,8 @@ const express = require('express');
 const axios = require('axios');
 const path = require('path');
 const cookieParser = require('cookie-parser');
+const cors = require('cors');
+const helmet = require('helmet');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,34 +12,51 @@ const PORT = process.env.PORT || 3000;
 // Configurações OAuth2
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const BASE_URL = process.env.BASE_URL || 'https://holly-j4a7.onrender.com';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 const REDIRECT_URI = `${BASE_URL}/auth/discord/callback`;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 // Middlewares
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(cors({
+  origin: FRONTEND_URL,
+  credentials: true
+}));
+app.use(helmet());
 
-// Middleware de autenticação
-function authenticateToken(req, res, next) {
-    const token = req.cookies.holly_token || req.query.token;
-    if (!token) return res.status(401).json({ error: 'Não autorizado' });
-    req.token = token;
-    next();
+// Verificação das variáveis de ambiente
+if (!CLIENT_ID || !CLIENT_SECRET) {
+  console.error('ERRO: DISCORD_CLIENT_ID ou DISCORD_CLIENT_SECRET não definidos');
+  process.exit(1);
 }
 
-// Inicia fluxo OAuth2
-app.get('/auth/discord', (req, res) => {
-    const params = new URLSearchParams({
-        client_id: CLIENT_ID,
-        redirect_uri: REDIRECT_URI,
-        response_type: 'code',
-        scope: 'identify guilds'
-    });
-    res.redirect(`https://discord.com/api/oauth2/authorize?${params.toString()}`);
-});
+// Middleware de autenticação melhorado
+function authenticateToken(req, res, next) {
+  const token = req.cookies.holly_token || req.query.token;
+  
+  if (!token) {
+    return res.status(401).json({ error: 'Não autorizado' });
+  }
 
-// /auth/discord apenas monta o link de autorização e redireciona
+  try {
+    // Verificação básica do token (em produção, use jsonwebtoken)
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+    
+    if (payload.exp * 1000 < Date.now()) {
+      return res.status(401).json({ error: 'Token expirado' });
+    }
+
+    req.user = payload;
+    next();
+  } catch (error) {
+    console.error('Erro na verificação do token:', error);
+    return res.status(403).json({ error: 'Token inválido' });
+  }
+}
+
+// Rota de autenticação (mantida original)
 app.get('/auth/discord', (req, res) => {
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
@@ -45,85 +64,160 @@ app.get('/auth/discord', (req, res) => {
     response_type: 'code',
     scope: 'identify guilds'
   });
+
   res.redirect(`https://discord.com/api/oauth2/authorize?${params.toString()}`);
 });
 
-// /auth/discord/callback troca o code pelo token do usuário
+// Rota de callback melhorada
 app.get('/auth/discord/callback', async (req, res) => {
   try {
-    const { code } = req.query;
-    if (!code) return res.redirect('/dashboard.html?error=no_code');
+    const { code, error } = req.query;
 
-    const tokenResponse = await axios.post(
-      'https://discord.com/api/oauth2/token',
-      new URLSearchParams({
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: REDIRECT_URI,
-      }),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-    );
+    if (error) {
+      console.error('Erro do Discord:', error);
+      return res.redirect(`${FRONTEND_URL}/dashboard.html?error=auth_failed`);
+    }
 
-    // Salva o access_token do usuário
+    if (!code) {
+      return res.redirect(`${FRONTEND_URL}/dashboard.html?error=no_code`);
+    }
+
+    // Troca o code por access_token
+    const tokenResponse = await axios.post('https://discord.com/api/oauth2/token', new URLSearchParams({
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      grant_type: 'authorization_code',
+      code: code,
+      redirect_uri: REDIRECT_URI,
+      scope: 'identify guilds'
+    }), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+
+    // Configura o cookie seguro com opções melhoradas
     res.cookie('holly_token', tokenResponse.data.access_token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: tokenResponse.data.expires_in * 1000
+      sameSite: 'lax',
+      maxAge: tokenResponse.data.expires_in * 1000,
+      path: '/',
+      domain: process.env.COOKIE_DOMAIN || undefined
     });
 
-    res.redirect('/dashboard.html');
-  } catch (err) {
-    console.error(err.response?.data || err);
-    res.redirect('/dashboard.html?error=auth_failed');
+    res.redirect(`${FRONTEND_URL}/dashboard.html`);
+
+  } catch (error) {
+    console.error('ERRO NO CALLBACK:', error.response?.data || error.message);
+    res.redirect(`${FRONTEND_URL}/dashboard.html?error=auth_failed`);
   }
 });
 
-// Rota de dados do usuário
+// Nova rota de logout
+app.post('/auth/logout', (req, res) => {
+  res.clearCookie('holly_token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    domain: process.env.COOKIE_DOMAIN || undefined
+  });
+  res.status(200).json({ message: 'Logout realizado com sucesso' });
+});
+
+// Rota para dados do usuário (mantida com melhor tratamento de erro)
 app.get('/api/user', authenticateToken, async (req, res) => {
-    try {
-        const userRes = await axios.get('https://discord.com/api/users/@me', {
-            headers: { 'Authorization': `Bearer ${req.token}` }
-        });
-        res.json({ ...userRes.data, plan: 'free' });
-    } catch {
-        res.status(500).json({ error: 'Erro ao buscar usuário' });
-    }
-});
-
-// Rota de guilds do usuário
-app.get('/api/user/guilds', authenticateToken, async (req, res) => {
-    try {
-        const guildsRes = await axios.get('https://discord.com/api/users/@me/guilds', {
-            headers: { 'Authorization': `Bearer ${req.token}` }
-        });
-        res.json(guildsRes.data);
-    } catch {
-        res.status(500).json({ error: 'Erro ao buscar servidores' });
-    }
-});
-
-// Rota de estatísticas
-app.get('/api/stats', (req, res) => {
-    res.json({
-        commands_24h: 1250,
-        unique_users: 842,
-        uptime: 99.8,
-        commands_by_hour: Array(24).fill().map(() => Math.floor(Math.random() * 100)),
-        command_categories: { moderation: 35, fun: 25, utility: 20, music: 15, other: 5 }
+  try {
+    const userRes = await axios.get('https://discord.com/api/users/@me', {
+      headers: { 'Authorization': `Bearer ${req.token}` }
     });
+    
+    res.json({
+      ...userRes.data,
+      plan: 'free'
+    });
+  } catch (error) {
+    console.error('Erro ao buscar usuário:', error);
+    res.status(500).json({ 
+      error: 'Erro ao buscar usuário',
+      details: error.response?.data || error.message
+    });
+  }
 });
 
-// Rotas estáticas
+// Rota para servidores do usuário (mantida com melhor tratamento de erro)
+app.get('/api/user/guilds', authenticateToken, async (req, res) => {
+  try {
+    const guildsRes = await axios.get('https://discord.com/api/users/@me/guilds', {
+      headers: { 'Authorization': `Bearer ${req.token}` }
+    });
+    
+    res.json(guildsRes.data);
+  } catch (error) {
+    console.error('Erro ao buscar servidores:', error);
+    res.status(500).json({ 
+      error: 'Erro ao buscar servidores',
+      details: error.response?.data || error.message
+    });
+  }
+});
+
+// Rota para estatísticas do bot (mantida com melhor tratamento de erro)
+app.get('/api/stats', async (req, res) => {
+  try {
+    res.json({
+      commands_24h: 1250,
+      unique_users: 842,
+      uptime: 99.8,
+      commands_by_hour: Array(24).fill().map(() => Math.floor(Math.random() * 100)),
+      command_categories: {
+        moderation: 35,
+        fun: 25,
+        utility: 20,
+        music: 15,
+        other: 5
+      }
+    });
+  } catch (error) {
+    console.error('Erro ao buscar estatísticas:', error);
+    res.status(500).json({ 
+      error: 'Erro ao buscar estatísticas',
+      details: error.message
+    });
+  }
+});
+
+// Rotas estáticas (mantidas originais)
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-app.get('/dashboard.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+app.get('/dashboard.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+
+// Inicia o servidor (mantido original com mensagem melhorada)
 app.listen(PORT, () => {
-    console.log(`Servidor rodando em http://localhost:${PORT}`);
+  console.log(`
+  ======================================
+  🚀 Servidor rodando na porta ${PORT}
+  ======================================
+  Configurações:
+  - Modo: ${process.env.NODE_ENV || 'development'}
+  - Client ID: ${CLIENT_ID}
+  - Redirect URI: ${REDIRECT_URI}
+  - Base URL: ${BASE_URL}
+  - Frontend URL: ${FRONTEND_URL}
+  ======================================
+  `);
+});
+
+// Tratamento de erros global melhorado
+process.on('unhandledRejection', (err) => {
+  console.error('Erro não tratado:', err);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Exceção não capturada:', err);
 });
