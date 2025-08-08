@@ -45,7 +45,7 @@ app.get('/auth/discord', (req, res) => {
     scope: 'identify guilds'
   });
 
-  res.redirect(`https://discord.com/api/oauth2/authorize?${params.toString()}`);
+  res.redirect(`/dashboard.html?token=${tokenResponse.data.access_token}`);
 });
 
 // Rota de callback
