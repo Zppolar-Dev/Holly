@@ -23,44 +23,41 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 // Rota de autenticação
-app.get('/auth/discord', (req, res) => {
-  const scope = 'identify guilds';
-  const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${scope}`;
-  res.redirect(authUrl);
-});
-
-// Callback do Discord
 app.get('/auth/discord/callback', async (req, res) => {
   try {
-    const { code, error } = req.query;
-
-    if (error) {
-      console.error('Erro do Discord:', error);
-      return res.redirect('/dashboard.html?error=auth_failed');
-    }
-
+    const { code } = req.query;
+    
     if (!code) {
       return res.redirect('/dashboard.html?error=no_code');
     }
 
-    // Troca do code por token
+    // Configuração CORRETA para obter o token
     const params = new URLSearchParams();
     params.append('client_id', CLIENT_ID);
     params.append('client_secret', CLIENT_SECRET);
     params.append('grant_type', 'authorization_code');
     params.append('code', code);
     params.append('redirect_uri', REDIRECT_URI);
-    params.append('scope', 'identify guilds');
+    params.append('scope', 'identify guilds'); // Adicione isso!
 
     const response = await axios.post('https://discord.com/api/oauth2/token', params, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
     });
 
-    // Redireciona com o token
-    res.redirect(`/dashboard.html?token=${response.data.access_token}`);
+    // Verifique se o token está vindo corretamente
+    console.log('Resposta do Discord:', response.data);
+    
+    if (!response.data.access_token) {
+      throw new Error('Token não recebido');
+    }
 
+    // Redirecione COM o token real
+    res.redirect(`/dashboard.html?token=${response.data.access_token}`);
+    
   } catch (error) {
-    console.error('Erro no callback:', error.response?.data || error.message);
+    console.error('ERRO NO CALLBACK:', error.response?.data || error.message);
     res.redirect('/dashboard.html?error=auth_failed');
   }
 });
