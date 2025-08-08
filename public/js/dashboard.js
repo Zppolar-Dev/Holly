@@ -864,44 +864,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // Mostrar notificação
-    function showNotification(message, type = 'info') {
-        const notification = document.createElement('div');
-        notification.className = 'notification';
-        notification.setAttribute('role', 'alert');
-        notification.setAttribute('aria-live', 'assertive');
-        
-        const iconMap = {
-            success: 'check-circle',
-            error: 'exclamation-triangle',
-            info: 'info-circle',
-            warning: 'exclamation-circle'
-        };
-        
-        notification.innerHTML = `
-            <i class="fas fa-${iconMap[type] || 'info-circle'}" aria-hidden="true"></i>
-            <span>${message}</span>
-        `;
-        
-        notification.style.backgroundColor = 
-            type === 'success' ? 'var(--success-color)' :
-            type === 'error' ? 'var(--danger-color)' :
-            type === 'warning' ? 'var(--warning-color)' : 'var(--info-color)';
-
-        document.body.appendChild(notification);
-
-        setTimeout(() => {
-            notification.classList.add('show');
-        }, 10);
-
-        setTimeout(() => {
-            notification.classList.remove('show');
-            setTimeout(() => {
-                notification.remove();
-            }, 300);
-        }, 5000);
-    }
-
     // Atualizar relógio
     function updateClock() {
         if (!UI.currentTime) return;
