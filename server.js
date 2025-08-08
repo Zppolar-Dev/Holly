@@ -1,10 +1,10 @@
-const path = require('path');
+require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
-require('dotenv').config();
+const path = require('path');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
 // Configurações OAuth2
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
@@ -12,33 +12,54 @@ const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const BASE_URL = process.env.BASE_URL || 'https://holly-j4a7.onrender.com';
 const REDIRECT_URI = `${BASE_URL}/auth/discord/callback`;
 
-// Validação das variáveis de ambiente
+// Middlewares
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Verificação das variáveis de ambiente
 if (!CLIENT_ID || !CLIENT_SECRET) {
-  console.error('Erro: DISCORD_CLIENT_ID ou DISCORD_CLIENT_SECRET não configurados');
+  console.error('ERRO: DISCORD_CLIENT_ID ou DISCORD_CLIENT_SECRET não definidos');
   process.exit(1);
 }
 
-// Middlewares
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.json());
-
 // Rota de autenticação
+app.get('/auth/discord', (req, res) => {
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    response_type: 'code',
+    scope: 'identify guilds'
+  });
+
+  const discordAuthUrl = `https://discord.com/api/oauth2/authorize?${params.toString()}`;
+  console.log(`Redirecionando para: ${discordAuthUrl}`);
+  res.redirect(discordAuthUrl);
+});
+
+// Rota de callback
 app.get('/auth/discord/callback', async (req, res) => {
   try {
-    const { code } = req.query;
-    
+    const { code, error } = req.query;
+
+    if (error) {
+      console.error('Erro do Discord:', error);
+      return res.redirect('/dashboard.html?error=auth_failed');
+    }
+
     if (!code) {
       return res.redirect('/dashboard.html?error=no_code');
     }
 
-    // Configuração CORRETA para obter o token
+    console.log('Code recebido:', code);
+
+    // Troca o code por access_token
     const params = new URLSearchParams();
     params.append('client_id', CLIENT_ID);
     params.append('client_secret', CLIENT_SECRET);
     params.append('grant_type', 'authorization_code');
     params.append('code', code);
     params.append('redirect_uri', REDIRECT_URI);
-    params.append('scope', 'identify guilds'); // Adicione isso!
+    params.append('scope', 'identify guilds');
 
     const response = await axios.post('https://discord.com/api/oauth2/token', params, {
       headers: {
@@ -46,18 +67,26 @@ app.get('/auth/discord/callback', async (req, res) => {
       }
     });
 
-    // Verifique se o token está vindo corretamente
-    console.log('Resposta do Discord:', response.data);
-    
+    console.log('Resposta do Discord:', {
+      status: response.status,
+      data: { 
+        access_token: response.data.access_token ? '***RECEBIDO***' : null,
+        expires_in: response.data.expires_in
+      }
+    });
+
     if (!response.data.access_token) {
-      throw new Error('Token não recebido');
+      throw new Error('Access token não recebido');
     }
 
-    // Redirecione COM o token real
+    // Redireciona com o token
     res.redirect(`/dashboard.html?token=${response.data.access_token}`);
-    
+
   } catch (error) {
-    console.error('ERRO NO CALLBACK:', error.response?.data || error.message);
+    console.error('ERRO NO CALLBACK:', {
+      message: error.message,
+      response: error.response?.data
+    });
     res.redirect('/dashboard.html?error=auth_failed');
   }
 });
@@ -72,8 +101,17 @@ app.get('/dashboard.html', (req, res) => {
 });
 
 // Inicia o servidor
-app.listen(port, () => {
-  console.log(`Servidor rodando em ${BASE_URL}`);
+app.listen(PORT, () => {
+  console.log(`
+  ======================================
+  🚀 Servidor rodando na porta ${PORT}
+  ======================================
+  Configurações OAuth2:
+  - Client ID: ${CLIENT_ID}
+  - Redirect URI: ${REDIRECT_URI}
+  - Base URL: ${BASE_URL}
+  ======================================
+  `);
 });
 
 // Tratamento de erros
