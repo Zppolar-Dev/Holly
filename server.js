@@ -45,7 +45,7 @@ app.get('/auth/discord', (req, res) => {
     scope: 'identify guilds'
   });
 
-  res.redirect(`/dashboard.html?token=${tokenResponse.data.access_token}`);
+  res.redirect(`https://discord.com/api/oauth2/authorize?${params.toString()}`);
 });
 
 // Rota de callback
@@ -63,18 +63,22 @@ app.get('/auth/discord/callback', async (req, res) => {
     }
 
     // Troca o code por access_token
-    const tokenResponse = await axios.post('https://discord.com/api/oauth2/token', new URLSearchParams({
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-      grant_type: 'authorization_code',
-      code: code,
-      redirect_uri: REDIRECT_URI,
-      scope: 'identify guilds'
-    }), {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+    const tokenResponse = await axios.post(
+      'https://discord.com/api/oauth2/token',
+      new URLSearchParams({
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: REDIRECT_URI,
+        scope: 'identify guilds'
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
       }
-    });
+    );
 
     // Configura o cookie seguro
     res.cookie('holly_token', tokenResponse.data.access_token, {
@@ -84,7 +88,8 @@ app.get('/auth/discord/callback', async (req, res) => {
       maxAge: tokenResponse.data.expires_in * 1000
     });
 
-    res.redirect('/dashboard.html');
+    // Redireciona com o token na URL para o front salvar no localStorage
+    res.redirect(`/dashboard.html?token=${tokenResponse.data.access_token}`);
 
   } catch (error) {
     console.error('ERRO NO CALLBACK:', error.response?.data || error.message);
