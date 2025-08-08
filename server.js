@@ -37,43 +37,48 @@ app.get('/auth/discord', (req, res) => {
     res.redirect(`https://discord.com/api/oauth2/authorize?${params.toString()}`);
 });
 
-// Callback do OAuth2
+// /auth/discord apenas monta o link de autorização e redireciona
+app.get('/auth/discord', (req, res) => {
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    response_type: 'code',
+    scope: 'identify guilds'
+  });
+  res.redirect(`https://discord.com/api/oauth2/authorize?${params.toString()}`);
+});
+
+// /auth/discord/callback troca o code pelo token do usuário
 app.get('/auth/discord/callback', async (req, res) => {
-    try {
-        const { code, error } = req.query;
-        if (error) return res.redirect('/dashboard.html?error=auth_failed');
-        if (!code) return res.redirect('/dashboard.html?error=no_code');
+  try {
+    const { code } = req.query;
+    if (!code) return res.redirect('/dashboard.html?error=no_code');
 
-        // Troca code por access_token do usuário
-        const tokenResponse = await axios.post(
-            'https://discord.com/api/oauth2/token',
-            new URLSearchParams({
-                client_id: CLIENT_ID,
-                client_secret: CLIENT_SECRET,
-                grant_type: 'authorization_code',
-                code: code,
-                redirect_uri: REDIRECT_URI,
-                scope: 'identify guilds'
-            }),
-            { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-        );
+    const tokenResponse = await axios.post(
+      'https://discord.com/api/oauth2/token',
+      new URLSearchParams({
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT_URI,
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
 
-        const userAccessToken = tokenResponse.data.access_token;
+    // Salva o access_token do usuário
+    res.cookie('holly_token', tokenResponse.data.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: tokenResponse.data.expires_in * 1000
+    });
 
-        // Salva token em cookie HTTP-only
-        res.cookie('holly_token', userAccessToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: tokenResponse.data.expires_in * 1000
-        });
-
-        // Passa o token para o front-end via URL (para o dashboard.js salvar no localStorage)
-        res.redirect(`/dashboard.html?token=${userAccessToken}`);
-    } catch (err) {
-        console.error('Erro no callback OAuth2:', err.response?.data || err.message);
-        res.redirect('/dashboard.html?error=auth_failed');
-    }
+    res.redirect('/dashboard.html');
+  } catch (err) {
+    console.error(err.response?.data || err);
+    res.redirect('/dashboard.html?error=auth_failed');
+  }
 });
 
 // Rota de dados do usuário
