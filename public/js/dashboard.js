@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Configurações
     const CONFIG = {
         CLIENT_ID: '1069819161057968218',
-        REDIRECT_URI: 'https://holly-j4a7.onrender.com/auth/discord/',
+        REDIRECT_URI: encodeURIComponent(window.location.origin + '/auth/discord/callback'),
         API_BASE_URL: 'https://holly-j4a7.onrender.com',
         DEFAULT_AVATAR: 'https://cdn.discordapp.com/embed/avatars/0.png',
         THEME_KEY: 'holly_theme',
