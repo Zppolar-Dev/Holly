@@ -5,7 +5,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 require('dotenv').config();
 
-const discordAuth = require('./js/discordAuth');
+const discordAuth = require('./public/js/discordAuth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
