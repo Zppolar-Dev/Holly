@@ -1,23 +1,22 @@
 /**
  * Dashboard Holly - Gerenciamento de Bot Discord
- * Versão: 2.4.9
+ * Versão: 2.5.0
  * Autor: Daniel Afonso
  * Data: 2023
- * Melhorias: Sidebar corrigida, Overlay funcional, Acessibilidade
+ * Melhorias: Segurança, Tratamento de Erros, Performance
  */
 
 document.addEventListener('DOMContentLoaded', async function() {
-    // Configurações
+    // Configurações atualizadas
     const CONFIG = {
         CLIENT_ID: '1069819161057968218',
-        REDIRECT_URI: encodeURIComponent(window.location.origin + '/auth/discord/callback'),
-        API_BASE_URL: 'https://holly-j4a7.onrender.com/api',
+        API_BASE_URL: window.location.origin, // Usa a origem atual
         DEFAULT_AVATAR: 'https://cdn.discordapp.com/embed/avatars/0.png',
         THEME_KEY: 'holly_theme',
-        TOKEN_KEY: 'holly_token'
+        TOKEN_EXPIRATION_CHECK: true
     };
 
-    // Elementos UI
+    // Elementos da UI (atualizado com novos seletores)
     const UI = {
         loginBtn: document.getElementById('login-btn'),
         userDropdown: document.getElementById('userDropdown'),
@@ -48,10 +47,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         feedbackForm: document.getElementById('feedbackForm'),
         loadingOverlay: document.getElementById('loadingOverlay'),
         currentTime: document.getElementById('current-time'),
-        overlay: document.getElementById('overlay')
+        overlay: document.getElementById('overlay') || document.createElement('div') // Fallback seguro
     };
 
-    // Estado
+    // Estado da aplicação (atualizado)
     const STATE = {
         user: null,
         guilds: [],
@@ -59,23 +58,27 @@ document.addEventListener('DOMContentLoaded', async function() {
         theme: localStorage.getItem(CONFIG.THEME_KEY) || 'light',
         isSidebarOpen: false,
         isMobileMenuOpen: false,
-        isOverlayVisible: false
+        isOverlayVisible: false,
+        lastScrollPosition: 0,
+        charts: {
+            activity: null,
+            commands: null
+        }
     };
 
-    // Inicialização
+    // Inicialização (atualizada com tratamento de erro)
     async function init() {
-        setupEventListeners();
-        setupOverlay();
-        initSidebarState();
-        applyTheme();
-        updateActiveLink();
-        checkUrlForToken();
-        
-        showLoading(true);
-        
         try {
-            const isAuthenticated = await checkAuth();
-            if (isAuthenticated) {
+            setupEventListeners();
+            setupOverlay();
+            initSidebarState();
+            applyTheme();
+            updateActiveLink();
+            
+            showLoading(true);
+            await checkAuth();
+            
+            if (STATE.user) {
                 await Promise.all([
                     initCharts(),
                     updateClock()
@@ -90,18 +93,18 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // Configurar estado inicial da sidebar
+    // Configurar estado inicial da sidebar (melhorado)
     function initSidebarState() {
         const isMobile = window.innerWidth <= 768;
         STATE.isSidebarOpen = !isMobile;
-        STATE.isOverlayVisible = false;
         
-        UI.dashboardSidebar.classList.toggle('active', STATE.isSidebarOpen);
-        UI.dashboardContent.classList.toggle('sidebar-active', STATE.isSidebarOpen);
+        if (UI.dashboardSidebar) {
+            UI.dashboardSidebar.classList.toggle('active', STATE.isSidebarOpen);
+        }
         
-        // Ajusta margem no desktop para evitar sobreposição
-        if (window.innerWidth > 768) {
-            UI.dashboardContent.classList.toggle('sidebar-closed', !STATE.isSidebarOpen);
+        if (UI.dashboardContent) {
+            UI.dashboardContent.classList.toggle('sidebar-active', STATE.isSidebarOpen);
+            UI.dashboardContent.classList.toggle('sidebar-closed', !STATE.isSidebarOpen && window.innerWidth > 768);
         }
         
         if (UI.overlay) {
@@ -112,7 +115,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         updateSidebarControls();
     }
 
-    // Atualizar controles da sidebar
+    // Atualizar controles da sidebar (melhorado)
     function updateSidebarControls() {
         if (UI.sidebarToggle) {
             UI.sidebarToggle.classList.toggle('active', STATE.isSidebarOpen);
@@ -125,29 +128,33 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // Configurar overlay
+    // Configurar overlay (melhorado)
     function setupOverlay() {
-        if (UI.overlay) {
-            UI.overlay.addEventListener('click', () => {
-                if (window.innerWidth <= 768) {
-                    toggleSidebar();
-                }
-            });
-            UI.overlay.style.display = 'none';
-        }
+        if (!UI.overlay) return;
+        
+        UI.overlay.addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+                toggleSidebar();
+            }
+        });
+        UI.overlay.style.display = 'none';
     }
 
-    // Alternar sidebar
+    // Alternar sidebar (melhorado com acessibilidade)
     function toggleSidebar() {
         STATE.isSidebarOpen = !STATE.isSidebarOpen;
         STATE.isOverlayVisible = STATE.isSidebarOpen && window.innerWidth <= 768;
         
-        UI.dashboardSidebar.classList.toggle('active', STATE.isSidebarOpen);
-        UI.dashboardContent.classList.toggle('sidebar-active', STATE.isSidebarOpen);
+        if (UI.dashboardSidebar) {
+            UI.dashboardSidebar.classList.toggle('active', STATE.isSidebarOpen);
+        }
         
-        // Ajusta margem no desktop para evitar sobreposição
-        if (window.innerWidth > 768) {
-            UI.dashboardContent.classList.toggle('sidebar-closed', !STATE.isSidebarOpen);
+        if (UI.dashboardContent) {
+            UI.dashboardContent.classList.toggle('sidebar-active', STATE.isSidebarOpen);
+            
+            if (window.innerWidth > 768) {
+                UI.dashboardContent.classList.toggle('sidebar-closed', !STATE.isSidebarOpen);
+            }
         }
         
         if (UI.overlay) {
@@ -165,19 +172,10 @@ document.addEventListener('DOMContentLoaded', async function() {
             document.body.style.overflow = STATE.isSidebarOpen ? 'hidden' : '';
         }
         
-        if (UI.sidebarToggle) {
-            UI.sidebarToggle.classList.toggle('active', STATE.isSidebarOpen);
-            UI.sidebarToggle.setAttribute('aria-expanded', STATE.isSidebarOpen);
-            UI.sidebarToggle.setAttribute('aria-label', 
-                STATE.isSidebarOpen ? 'Fechar menu' : 'Abrir menu');
-        }
-        
-        if (UI.closeSidebar) {
-            UI.closeSidebar.setAttribute('aria-expanded', STATE.isSidebarOpen);
-        }
+        updateSidebarControls();
     }
 
-    // Configurar eventos
+    // Configurar event listeners (melhorado)
     function setupEventListeners() {
         // Autenticação
         if (UI.loginBtn) {
@@ -272,16 +270,17 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         // Redimensionamento da janela
         window.addEventListener('resize', function() {
-            const wasMobile = STATE.isOverlayVisible;
             const isMobile = window.innerWidth <= 768;
-            
-            if (wasMobile !== isMobile) {
+            if (STATE.isOverlayVisible !== isMobile) {
                 initSidebarState();
             }
         });
+
+        // Scroll
+        window.addEventListener('scroll', handleScroll);
     }
 
-    // Mostrar/Ocultar loading
+    // Mostrar/Ocultar loading (melhorado)
     function showLoading(show) {
         if (!UI.loadingOverlay) return;
         
@@ -298,12 +297,14 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // Atualizar link ativo
+    // Atualizar link ativo (melhorado)
     function updateActiveLink() {
         const links = document.querySelectorAll('.navbar-links a, .sidebar-menu a');
         const currentPage = window.location.pathname.split('/').pop() || 'index.html';
         
         links.forEach(link => {
+            if (!link.getAttribute('href')) return;
+            
             const linkPage = link.getAttribute('href').split('/').pop();
             const isActive = currentPage === linkPage || 
                 (currentPage === 'index.html' && linkPage === '') ||
@@ -314,135 +315,48 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     }
 
-    // Gerenciamento de autenticação
+    // Gerenciamento de autenticação (totalmente atualizado)
     async function checkAuth() {
-        const token = localStorage.getItem(CONFIG.TOKEN_KEY);
-        
-        if (!token) {
-            showUnauthenticatedUI();
-            return false;
-        }
-
-        // Verificar expiração do token
-        if (CONFIG.TOKEN_EXPIRATION_CHECK) {
-            try {
-                const payload = JSON.parse(atob(token.split('.')[1]));
-                if (payload.exp * 1000 < Date.now()) {
-                    showNotification('Sessão expirada. Faça login novamente.', 'warning');
-                    logout();
-                    return false;
-                }
-            } catch (e) {
-                console.error('Token parsing error:', e);
-                logout();
-                return false;
-            }
-        }
-
         try {
-            await Promise.all([
-                fetchUserData(token),
-                fetchUserGuilds(token),
-                fetchBotStats()
-            ]);
-            return true;
-        } catch (error) {
-            console.error('Authentication check failed:', error);
-            showNotification('Erro ao verificar autenticação. Tente novamente.', 'error');
-            logout();
-            return false;
-        }
-    }
-
-    // Obter dados do usuário
-    async function fetchUserData(token) {
-        try {
-            const [userRes, profileRes] = await Promise.all([
-                fetch('https://discord.com/api/users/@me', {
-                    headers: { 
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                }),
-                fetch(`${CONFIG.API_BASE_URL}/profile`, {
-                    headers: { 
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                })
+            const [userRes, guildsRes, statsRes] = await Promise.all([
+                fetch(`${CONFIG.API_BASE_URL}/api/user`, { credentials: 'include' }),
+                fetch(`${CONFIG.API_BASE_URL}/api/user/guilds`, { credentials: 'include' }),
+                fetch(`${CONFIG.API_BASE_URL}/api/stats`, { credentials: 'include' })
             ]);
 
             if (!userRes.ok) {
                 if (userRes.status === 401) {
-                    logout();
+                    throw new Error('Não autorizado');
                 }
                 throw new Error(`HTTP error! status: ${userRes.status}`);
             }
-            
+
             const userData = await userRes.json();
-            const profileData = profileRes.ok ? await profileRes.json() : { plan: 'free' };
+            const guildsData = await guildsRes.json();
+            const statsData = await statsRes.json();
 
-            STATE.user = { ...userData, ...profileData };
-            updateUserUI();
-            return userData;
-        } catch (error) {
-            console.error('Error fetching user data:', error);
-            showNotification('Erro ao carregar dados do usuário', 'error');
-            throw error;
-        }
-    }
-
-    // Obter servidores do usuário
-    async function fetchUserGuilds(token) {
-        try {
-            const res = await fetch('https://discord.com/api/users/@me/guilds', {
-                headers: { 
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            if (!res.ok) {
-                if (res.status === 401) {
-                    logout();
-                }
-                throw new Error(`HTTP error! status: ${res.status}`);
-            }
-            
-            const guildsData = await res.json();
-            STATE.guilds = guildsData.filter(guild => guild.permissions & 0x20); // Filtra servidores gerenciáveis
-            updateServersUI();
-            return guildsData;
-        } catch (error) {
-            console.error('Error fetching guilds:', error);
-            showNotification('Erro ao carregar servidores', 'error');
-            throw error;
-        }
-    }
-
-    // Obter estatísticas do bot
-    async function fetchBotStats() {
-        try {
-            const res = await fetch(`${CONFIG.API_BASE_URL}/stats`, {
-                headers: { 'Content-Type': 'application/json' }
-            });
-            
-            if (!res.ok) {
-                throw new Error(`HTTP error! status: ${res.status}`);
-            }
-            
-            const statsData = await res.json();
+            STATE.user = userData;
+            STATE.guilds = guildsData.filter(guild => guild.permissions & 0x20);
             STATE.stats = statsData;
+
+            updateUserUI();
+            updateServersUI();
             updateStatsUI();
-            return statsData;
+
+            return true;
         } catch (error) {
-            console.error('Error fetching bot stats:', error);
-            showNotification('Erro ao carregar estatísticas do bot', 'error');
-            throw error;
+            console.error('Authentication check failed:', error);
+            showUnauthenticatedUI();
+            
+            if (error.message !== 'Não autorizado') {
+                showNotification('Erro ao verificar autenticação. Tente novamente.', 'error');
+            }
+            
+            return false;
         }
     }
 
-    // Atualizar UI com dados do usuário
+    // Atualizar UI com dados do usuário (melhorado)
     function updateUserUI() {
         if (!STATE.user) return;
 
@@ -483,7 +397,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // Atualizar status do usuário
+    // Atualizar status do usuário (mantido)
     function updateUserStatus(status) {
         const statusMap = {
             online: { color: 'var(--online-color)', text: 'Online' },
@@ -502,7 +416,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (UI.statusText) UI.statusText.textContent = currentStatus.text;
     }
 
-    // Atualizar UI dos servidores
+    // Atualizar UI dos servidores (melhorado)
     function updateServersUI() {
         if (!UI.serversGrid) return;
 
@@ -563,7 +477,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     }
 
-    // Atualizar estatísticas na UI
+    // Atualizar estatísticas na UI (melhorado)
     function updateStatsUI() {
         if (!STATE.stats) return;
 
@@ -582,8 +496,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         updateCharts();
     }
 
-    // Animação de contador
+    // Animação de contador (mantido)
     function animateCounter(element, start, end, duration) {
+        if (!element) return;
+        
         let startTimestamp = null;
         const step = (timestamp) => {
             if (!startTimestamp) startTimestamp = timestamp;
@@ -597,13 +513,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         window.requestAnimationFrame(step);
     }
 
-    // Inicializar gráficos
+    // Inicializar gráficos (melhorado)
     function initCharts() {
         const activityCtx = document.getElementById('activityChart')?.getContext('2d');
         const commandsCtx = document.getElementById('commandsChart')?.getContext('2d');
 
         if (activityCtx) {
-            window.activityChart = new Chart(activityCtx, {
+            STATE.charts.activity = new Chart(activityCtx, {
                 type: 'line',
                 data: {
                     labels: Array(24).fill().map((_, i) => `${i}h`),
@@ -621,7 +537,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
         if (commandsCtx) {
-            window.commandsChart = new Chart(commandsCtx, {
+            STATE.charts.commands = new Chart(commandsCtx, {
                 type: 'doughnut',
                 data: {
                     labels: ['Moderação', 'Diversão', 'Utilitários', 'Música', 'Outros'],
@@ -642,29 +558,29 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // Atualizar gráficos com dados reais
+    // Atualizar gráficos com dados reais (melhorado)
     function updateCharts() {
         if (!STATE.stats) return;
 
-        if (window.activityChart) {
-            window.activityChart.data.datasets[0].data = STATE.stats.commands_by_hour || 
+        if (STATE.charts.activity) {
+            STATE.charts.activity.data.datasets[0].data = STATE.stats.commands_by_hour || 
                 Array(24).fill().map((_, i) => Math.floor(Math.random() * 1000));
-            window.activityChart.update();
+            STATE.charts.activity.update();
         }
 
-        if (window.commandsChart) {
-            window.commandsChart.data.datasets[0].data = [
+        if (STATE.charts.commands) {
+            STATE.charts.commands.data.datasets[0].data = [
                 STATE.stats.command_categories?.moderation || 35,
                 STATE.stats.command_categories?.fun || 25,
                 STATE.stats.command_categories?.utility || 20,
                 STATE.stats.command_categories?.music || 15,
                 STATE.stats.command_categories?.other || 5
             ];
-            window.commandsChart.update();
+            STATE.charts.commands.update();
         }
     }
 
-    // Opções padrão para gráficos
+    // Opções padrão para gráficos (mantido)
     function getChartOptions(title) {
         return {
             responsive: true,
@@ -707,7 +623,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         };
     }
 
-    // Mostrar UI para usuários não autenticados
+    // Mostrar UI para usuários não autenticados (melhorado)
     function showUnauthenticatedUI() {
         if (UI.userAvatar) {
             UI.userAvatar.src = CONFIG.DEFAULT_AVATAR;
@@ -757,76 +673,68 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (UI.userCount) UI.userCount.textContent = '0';
     }
 
-    // Manipulador de autenticação
+    // Manipulador de autenticação (melhorado)
     function handleAuthClick() {
         if (STATE.user) {
             logout();
         } else {
-            const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CONFIG.CLIENT_ID}&redirect_uri=${CONFIG.REDIRECT_URI}&response_type=code&scope=identify%20guilds`;
-            window.location.href = discordAuthUrl;
+            window.location.href = `${CONFIG.API_BASE_URL}/auth/discord`;
         }
     }
 
-    // Logout
-    function logout() {
-        localStorage.removeItem(CONFIG.TOKEN_KEY);
-        STATE.user = null;
-        STATE.guilds = [];
-        STATE.stats = null;
-        showUnauthenticatedUI();
-        showNotification('Você saiu da sua conta', 'info');
-        window.location.href = window.location.pathname; // Recarrega a página sem token
-    }
-
-    // Verificar token na URL
-    function checkUrlForToken() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const token = urlParams.get('token');
-        
-        if (token) {
-            localStorage.setItem(CONFIG.TOKEN_KEY, token);
-            window.history.replaceState({}, document.title, window.location.pathname);
-            checkAuth();
+    // Logout (melhorado)
+    async function logout() {
+        try {
+            await fetch(`${CONFIG.API_BASE_URL}/auth/logout`, {
+                method: 'POST',
+                credentials: 'include'
+            });
+            
+            STATE.user = null;
+            STATE.guilds = [];
+            STATE.stats = null;
+            
+            if (STATE.charts.activity) STATE.charts.activity.destroy();
+            if (STATE.charts.commands) STATE.charts.commands.destroy();
+            
+            showUnauthenticatedUI();
+            showNotification('Você saiu da sua conta', 'info');
+            
+            // Redireciona apenas se não estiver na página inicial
+            if (!window.location.pathname.endsWith('index.html')) {
+                window.location.href = 'index.html';
+            }
+        } catch (error) {
+            console.error('Logout error:', error);
+            showNotification('Erro ao sair. Tente novamente.', 'error');
         }
     }
 
-    // Gerenciar servidor
-    function manageServer(guildId) {
-        showNotification(`Redirecionando para gerenciamento do servidor ${guildId}`, 'info');
-        // Implementação real redirecionaria para a página de gerenciamento
-        console.log(`Gerenciando servidor ${guildId}`);
-    }
-
-    // Visualizar detalhes do servidor
-    function viewServerDetails(guildId) {
-        console.log(`Visualizando servidor ${guildId}`);
-        // Implementação real mostraria detalhes do servidor
-    }
-
+    // Alternar menu mobile (melhorado)
     function toggleMobileMenu() {
-    STATE.isMobileMenuOpen = !STATE.isMobileMenuOpen;
-    
-    if (UI.navbarMenu) {
-        UI.navbarMenu.classList.toggle('active');
-    }
-    
-    if (UI.hamburger) {
-        UI.hamburger.classList.toggle('active');
-        UI.hamburger.setAttribute('aria-expanded', STATE.isMobileMenuOpen);
+        STATE.isMobileMenuOpen = !STATE.isMobileMenuOpen;
         
-        // Alternar ícone do hamburger
-        const icon = UI.hamburger.querySelector('i');
-        if (icon) {
-            icon.className = STATE.isMobileMenuOpen ? 'fas fa-times' : 'fas fa-bars';
+        if (UI.navbarMenu) {
+            UI.navbarMenu.classList.toggle('active');
         }
+        
+        if (UI.hamburger) {
+            UI.hamburger.classList.toggle('active');
+            UI.hamburger.setAttribute('aria-expanded', STATE.isMobileMenuOpen);
+            
+            const icon = UI.hamburger.querySelector('i');
+            if (icon) {
+                icon.className = STATE.isMobileMenuOpen ? 'fas fa-times' : 'fas fa-bars';
+            }
+        }
+        
+        document.body.style.overflow = STATE.isMobileMenuOpen ? 'hidden' : '';
     }
-    
-    // Bloquear scroll do body quando o menu estiver aberto
-    document.body.style.overflow = STATE.isMobileMenuOpen ? 'hidden' : '';
-}
 
-    // Alternar modal
+    // Alternar modal (melhorado)
     function toggleModal(show) {
+        if (!UI.feedbackModal) return;
+        
         if (show) {
             UI.feedbackModal.classList.add('active');
             document.body.style.overflow = 'hidden';
@@ -838,7 +746,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // Enviar feedback
+    // Enviar feedback (melhorado)
     async function handleFeedbackSubmit(e) {
         e.preventDefault();
         
@@ -856,7 +764,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         showLoading(true);
         
         try {
-            // Simulação de envio para API
+            // Simulação de envio (substitua por chamada real à API)
             await new Promise(resolve => setTimeout(resolve, 1000));
             
             toggleModal(false);
@@ -870,45 +778,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // Mostrar notificação
-    function showNotification(message, type = 'info') {
-        const notification = document.createElement('div');
-        notification.className = 'notification';
-        notification.setAttribute('role', 'alert');
-        notification.setAttribute('aria-live', 'assertive');
-        
-        const iconMap = {
-            success: 'check-circle',
-            error: 'exclamation-triangle',
-            info: 'info-circle',
-            warning: 'exclamation-circle'
-        };
-        
-        notification.innerHTML = `
-            <i class="fas fa-${iconMap[type] || 'info-circle'}" aria-hidden="true"></i>
-            <span>${message}</span>
-        `;
-        
-        notification.style.backgroundColor = 
-            type === 'success' ? 'var(--success-color)' :
-            type === 'error' ? 'var(--danger-color)' :
-            type === 'warning' ? 'var(--warning-color)' : 'var(--info-color)';
-
-        document.body.appendChild(notification);
-
-        setTimeout(() => {
-            notification.classList.add('show');
-        }, 10);
-
-        setTimeout(() => {
-            notification.classList.remove('show');
-            setTimeout(() => {
-                notification.remove();
-            }, 300);
-        }, 5000);
-    }
-
-    // Atualizar relógio
+    // Atualizar relógio (mantido)
     function updateClock() {
         if (!UI.currentTime) return;
         
@@ -927,6 +797,88 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         UI.currentTime.textContent = `${dateString} • ${timeString}`;
         UI.currentTime.setAttribute('aria-label', `Data e hora atual: ${dateString} às ${timeString}`);
+    }
+
+    // Alternar tema (melhorado)
+    function toggleTheme() {
+        STATE.theme = STATE.theme === 'light' ? 'dark' : 'light';
+        localStorage.setItem(CONFIG.THEME_KEY, STATE.theme);
+        applyTheme();
+    }
+
+    // Aplicar tema (melhorado)
+    function applyTheme() {
+        document.documentElement.setAttribute('data-theme', STATE.theme);
+        
+        if (UI.themeIcon) {
+            UI.themeIcon.className = STATE.theme === 'light' ? 'fas fa-moon' : 'fas fa-sun';
+            UI.themeIcon.setAttribute('aria-label', 
+                `Tema ${STATE.theme === 'light' ? 'claro' : 'escuro'}`);
+        }
+
+        showNotification(`Tema ${STATE.theme === 'light' ? 'claro' : 'escuro'} ativado`);
+    }
+
+    // Mostrar notificação (melhorado)
+    function showNotification(message, type = 'info') {
+        const types = {
+            success: { icon: 'check-circle', color: '#2ecc71' },
+            error: { icon: 'exclamation-triangle', color: '#e74c3c' },
+            info: { icon: 'info-circle', color: '#3498db' },
+            warning: { icon: 'exclamation-circle', color: '#f39c12' }
+        };
+
+        const notification = document.createElement('div');
+        notification.className = 'notification';
+        notification.setAttribute('role', 'alert');
+        notification.setAttribute('aria-live', 'assertive');
+        notification.innerHTML = `
+            <i class="fas fa-${types[type]?.icon || 'info-circle'}" aria-hidden="true"></i>
+            <span>${message}</span>
+        `;
+        notification.style.backgroundColor = types[type]?.color || '#3498db';
+
+        document.body.appendChild(notification);
+
+        // Animação de entrada
+        setTimeout(() => {
+            notification.classList.add('show');
+        }, 10);
+
+        // Remover após 5 segundos
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                notification.remove();
+            }, 300);
+        }, 5000);
+    }
+
+    // Lidar com scroll da página (melhorado)
+    function handleScroll() {
+        const currentScrollPosition = window.pageYOffset;
+
+        // Mostrar/ocultar botão "voltar ao topo"
+        if (UI.backToTop) {
+            if (currentScrollPosition > 300) {
+                UI.backToTop.classList.add('visible');
+            } else {
+                UI.backToTop.classList.remove('visible');
+            }
+        }
+
+        STATE.lastScrollPosition = currentScrollPosition;
+    }
+
+    // Gerenciar servidor (mock - mantido)
+    function manageServer(guildId) {
+        showNotification(`Redirecionando para gerenciamento do servidor ${guildId}`, 'info');
+        console.log(`Gerenciando servidor ${guildId}`);
+    }
+
+    // Visualizar detalhes do servidor (mock - mantido)
+    function viewServerDetails(guildId) {
+        console.log(`Visualizando servidor ${guildId}`);
     }
 
     // Inicializar a aplicação
