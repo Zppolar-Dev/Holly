@@ -5,9 +5,9 @@ const jwt = require('jsonwebtoken');
 // Configurações
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+const BASE_URL = process.env.BASE_URL;
 const REDIRECT_URI = `${BASE_URL}/auth/discord/callback`;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const FRONTEND_URL = process.env.FRONTEND_URL;
 const JWT_SECRET = process.env.JWT_SECRET || 'uma_chave_bem_segura';
 
 // Armazenamento temporário (ideal: Redis ou DB)
@@ -19,6 +19,10 @@ const sessionStore = new Map();
 function authenticateToken(req, res, next) {
     let token = req.cookies.holly_token;
 
+    // Debug: ver o que chegou na request
+    console.log('📥 Cookie recebido:', req.cookies.holly_token ? 'SIM' : 'NÃO');
+    console.log('📥 Header Authorization:', req.headers.authorization || 'N/A');
+
     // Se não veio no cookie, tenta Authorization header
     if (!token && req.headers.authorization) {
         const authHeader = req.headers.authorization;
@@ -28,14 +32,17 @@ function authenticateToken(req, res, next) {
     }
 
     if (!token) {
+        console.warn('⚠️ Nenhum token encontrado!');
         return res.status(401).json({ error: 'Não autorizado' });
     }
 
     try {
         const payload = jwt.verify(token, JWT_SECRET);
+        console.log('✅ JWT válido para user_id:', payload.user_id);
         req.user = payload;
         next();
     } catch (err) {
+        console.error('❌ JWT inválido:', err.message);
         return res.status(403).json({ error: 'Token inválido ou expirado' });
     }
 }
@@ -96,8 +103,8 @@ async function callback(req, res) {
         res.cookie('holly_token', jwtToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'none', // permite cross-site
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 dias
+        sameSite: 'none', // importante pro Render + fetch cross-site
+        maxAge: 7 * 24 * 60 * 60 * 1000
         });
 
         res.redirect(`${FRONTEND_URL}/dashboard.html`);
