@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Configurações atualizadas
     const CONFIG = {
         CLIENT_ID: '1069819161057968218',
-        API_BASE_URL: window.location.origin, // Usa a origem atual
+        API_BASE_URL: 'https://holly-j4a7.onrender.com', // Usa a origem atual
         DEFAULT_AVATAR: 'https://cdn.discordapp.com/embed/avatars/0.png',
         THEME_KEY: 'holly_theme',
         TOKEN_EXPIRATION_CHECK: true
