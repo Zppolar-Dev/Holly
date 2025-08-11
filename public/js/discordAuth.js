@@ -17,8 +17,19 @@ const sessionStore = new Map();
  * Middleware para validar o JWT interno
  */
 function authenticateToken(req, res, next) {
-    const token = req.cookies.holly_token;
-    if (!token) return res.status(401).json({ error: 'Não autorizado' });
+    let token = req.cookies.holly_token;
+
+    // Se não veio no cookie, tenta Authorization header
+    if (!token && req.headers.authorization) {
+        const authHeader = req.headers.authorization;
+        if (authHeader.startsWith('Bearer ')) {
+            token = authHeader.slice(7);
+        }
+    }
+
+    if (!token) {
+        return res.status(401).json({ error: 'Não autorizado' });
+    }
 
     try {
         const payload = jwt.verify(token, JWT_SECRET);
@@ -83,10 +94,10 @@ async function callback(req, res) {
         const jwtToken = jwt.sign({ user_id: userId }, JWT_SECRET, { expiresIn: '7d' });
 
         res.cookie('holly_token', jwtToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 dias
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none', // permite cross-site
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 dias
         });
 
         res.redirect(`${FRONTEND_URL}/dashboard.html`);
