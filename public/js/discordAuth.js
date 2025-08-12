@@ -5,44 +5,75 @@ const jwt = require('jsonwebtoken');
 // Configurações
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const BASE_URL = process.env.BASE_URL;
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 const REDIRECT_URI = `${BASE_URL}/auth/discord/callback`;
-const FRONTEND_URL = process.env.FRONTEND_URL;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const JWT_SECRET = process.env.JWT_SECRET || 'uma_chave_bem_segura';
 
 // Armazenamento temporário (ideal: Redis ou DB)
 const sessionStore = new Map();
 
+// Variáveis de controle do rate limit
+let rateLimitResetAt = 0;
+let remainingRequests = Infinity;
+
+// Função helper para aguardar
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Instância Axios com interceptores para Rate Limit
+const discordAPI = axios.create({
+    baseURL: 'https://discord.com/api',
+    timeout: 10000
+});
+
+// Interceptor de requisição — segura se estiver perto do limite
+discordAPI.interceptors.request.use(async (config) => {
+    const now = Date.now();
+    if (remainingRequests <= 1 && now < rateLimitResetAt) {
+        const waitMs = rateLimitResetAt - now;
+        console.warn(`⚠️ Quase estourando rate limit — aguardando ${waitMs}ms`);
+        await sleep(waitMs);
+    }
+    return config;
+});
+
+// Interceptor de resposta — lê os headers e ajusta o rate limit
+discordAPI.interceptors.response.use(async (response) => {
+    const rlRemaining = response.headers['x-ratelimit-remaining'];
+    const rlReset = response.headers['x-ratelimit-reset'];
+
+    if (rlRemaining !== undefined) {
+        remainingRequests = parseInt(rlRemaining, 10);
+    }
+    if (rlReset !== undefined) {
+        // Discord envia timestamp UNIX, multiplicar por 1000 para ms
+        rateLimitResetAt = parseFloat(rlReset) * 1000;
+    }
+    return response;
+}, async (error) => {
+    if (error.response && error.response.status === 429) {
+        const retryAfter = error.response.headers['retry-after'] || 1;
+        console.warn(`⏳ Rate limited — aguardando ${retryAfter}s...`);
+        await sleep(retryAfter * 1000);
+        return discordAPI.request(error.config);
+    }
+    return Promise.reject(error);
+});
+
 /**
  * Middleware para validar o JWT interno
  */
 function authenticateToken(req, res, next) {
-    let token = req.cookies.holly_token;
-
-    // Debug: ver o que chegou na request
-    console.log('📥 Cookie recebido:', req.cookies.holly_token ? 'SIM' : 'NÃO');
-    console.log('📥 Header Authorization:', req.headers.authorization || 'N/A');
-
-    // Se não veio no cookie, tenta Authorization header
-    if (!token && req.headers.authorization) {
-        const authHeader = req.headers.authorization;
-        if (authHeader.startsWith('Bearer ')) {
-            token = authHeader.slice(7);
-        }
-    }
-
-    if (!token) {
-        console.warn('⚠️ Nenhum token encontrado!');
-        return res.status(401).json({ error: 'Não autorizado' });
-    }
+    const token = req.cookies.holly_token;
+    if (!token) return res.status(401).json({ error: 'Não autorizado' });
 
     try {
         const payload = jwt.verify(token, JWT_SECRET);
-        console.log('✅ JWT válido para user_id:', payload.user_id);
         req.user = payload;
         next();
     } catch (err) {
-        console.error('❌ JWT inválido:', err.message);
         return res.status(403).json({ error: 'Token inválido ou expirado' });
     }
 }
@@ -69,8 +100,8 @@ async function callback(req, res) {
         if (!code) return res.redirect(`${FRONTEND_URL}/dashboard.html?error=no_code`);
 
         // Troca code por access_token
-        const tokenResponse = await axios.post(
-            'https://discord.com/api/oauth2/token',
+        const tokenResponse = await discordAPI.post(
+            '/oauth2/token',
             new URLSearchParams({
                 client_id: CLIENT_ID,
                 client_secret: CLIENT_SECRET,
@@ -84,7 +115,7 @@ async function callback(req, res) {
         const { access_token, refresh_token, expires_in } = tokenResponse.data;
 
         // Busca dados do usuário
-        const userRes = await axios.get('https://discord.com/api/users/@me', {
+        const userRes = await discordAPI.get('/users/@me', {
             headers: { Authorization: `Bearer ${access_token}` }
         });
 
@@ -101,10 +132,10 @@ async function callback(req, res) {
         const jwtToken = jwt.sign({ user_id: userId }, JWT_SECRET, { expiresIn: '7d' });
 
         res.cookie('holly_token', jwtToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'none', // importante pro Render + fetch cross-site
-        maxAge: 7 * 24 * 60 * 60 * 1000
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 dias
         });
 
         res.redirect(`${FRONTEND_URL}/dashboard.html`);
@@ -119,8 +150,8 @@ async function callback(req, res) {
  */
 async function refreshAccessToken(userId, session) {
     try {
-        const tokenResponse = await axios.post(
-            'https://discord.com/api/oauth2/token',
+        const tokenResponse = await discordAPI.post(
+            '/oauth2/token',
             new URLSearchParams({
                 client_id: CLIENT_ID,
                 client_secret: CLIENT_SECRET,
@@ -155,11 +186,9 @@ async function getValidAccessToken(userId) {
     const session = sessionStore.get(userId);
     if (!session) return null;
 
-    // Se expirado → renovar
     if (Date.now() >= session.expires_at) {
         return await refreshAccessToken(userId, session);
     }
-
     return session.access_token;
 }
 
@@ -187,7 +216,7 @@ async function getUserData(req, res) {
         const token = await getValidAccessToken(req.user.user_id);
         if (!token) return res.status(401).json({ error: 'Sessão expirada' });
 
-        const userRes = await axios.get('https://discord.com/api/users/@me', {
+        const userRes = await discordAPI.get('/users/@me', {
             headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -205,7 +234,7 @@ async function getUserGuilds(req, res) {
         const token = await getValidAccessToken(req.user.user_id);
         if (!token) return res.status(401).json({ error: 'Sessão expirada' });
 
-        const guildsRes = await axios.get('https://discord.com/api/users/@me/guilds', {
+        const guildsRes = await discordAPI.get('/users/@me/guilds', {
             headers: { Authorization: `Bearer ${token}` }
         });
 
