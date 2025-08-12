@@ -33,8 +33,12 @@ discordAPI.interceptors.request.use(async (config) => {
     const now = Date.now();
     if (remainingRequests <= 1 && now < rateLimitResetAt) {
         const waitMs = rateLimitResetAt - now;
-        console.warn(`⚠️ Quase estourando rate limit — aguardando ${waitMs}ms`);
-        await sleep(waitMs);
+        if (waitMs > 0 && waitMs <= 10 * 60 * 1000) { // Máx 10 minutos
+            console.warn(`⚠️ Quase estourando rate limit — aguardando ${waitMs}ms`);
+            await sleep(waitMs);
+        } else if (waitMs > 10 * 60 * 1000) {
+            console.warn(`⚠️ Reset de rate limit muito distante (${waitMs / 1000}s) — ignorando espera longa`);
+        }
     }
     return config;
 });
@@ -48,15 +52,26 @@ discordAPI.interceptors.response.use(async (response) => {
         remainingRequests = parseInt(rlRemaining, 10);
     }
     if (rlReset !== undefined) {
-        // Discord envia timestamp UNIX, multiplicar por 1000 para ms
-        rateLimitResetAt = parseFloat(rlReset) * 1000;
+        const resetTime = parseFloat(rlReset) * 1000;
+        if (!isNaN(resetTime)) {
+            rateLimitResetAt = resetTime;
+        }
     }
     return response;
 }, async (error) => {
     if (error.response && error.response.status === 429) {
-        const retryAfter = error.response.headers['retry-after'] || 1;
-        console.warn(`⏳ Rate limited — aguardando ${retryAfter}s...`);
-        await sleep(retryAfter * 1000);
+        let retryAfter = parseFloat(error.response.headers['retry-after'] || 1) * 1000;
+
+        // Evita espera absurda — máx 10 minutos
+        if (retryAfter > 10 * 60 * 1000) {
+            console.warn(`⏳ Rate limit global ou espera absurda (${retryAfter / 1000}s) — ignorando espera longa`);
+            retryAfter = 0;
+        }
+
+        if (retryAfter > 0) {
+            console.warn(`⏳ Rate limited — aguardando ${retryAfter}ms...`);
+            await sleep(retryAfter);
+        }
         return discordAPI.request(error.config);
     }
     return Promise.reject(error);
